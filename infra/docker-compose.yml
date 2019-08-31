@@ -1,0 +1,125 @@
+version: '3'
+services:
+  elasticsearch:
+    image: docker.elastic.co/elasticsearch/elasticsearch:7.2.0
+    volumes:
+      - ./elasticsearch/elasticsearch.yml:/usr/share/elasticsearch/config/elasticsearch.yml:ro
+      - elasticsearch-data:/usr/share/elasticsearch/data
+    environment:
+      ES_JAVA_OPTS: "-Xmx512m -Xms512m"
+    ulimits:
+      memlock:
+        soft: -1
+        hard: -1
+    ports:
+      - 9200:9200
+      - 9300:9300
+    networks:
+      - svcnet
+    healthcheck:
+      test: ['CMD', 'curl', '-f', 'http://localhost:9200']
+      interval: 10s
+      timeout: 5s
+      retries: 3
+  kibana:
+    depends_on:
+      - elasticsearch
+    image: docker.elastic.co/kibana/kibana:7.2.0
+    volumes:
+      - ./elasticsearch/:/usr/share/kibana/config:ro
+    ports:
+      - 5601:5601
+    networks:
+      - svcnet
+    healthcheck:
+      test: ['CMD', 'curl', '-f', 'http://localhost:5601']
+      interval: 10s
+      timeout: 5s
+      retries: 3
+  logstash:
+    image: docker.elastic.co/logstash/logstash:7.2.0
+    volumes:
+      - ./elasticsearch/logstash.yml:/usr/share/logstash/config/logstash.yml:ro
+      - ./elasticsearch:/usr/share/logstash/pipeline:ro
+    environment:
+      LS_JAVA_OPTS: "-Xmx256m -Xms256m"
+    ports:
+      - 5000:5000
+    networks:
+      - svcnet
+    depends_on:
+      - elasticsearch
+    healthcheck:
+      test: ['CMD', 'curl', '-f', 'http://localhost:5000']
+      interval: 10s
+      timeout: 5s
+      retries: 3
+  elasticapm:
+    image: docker.elastic.co/apm/apm-server:7.2.0
+    ports:
+      - 8200:8200
+    environment:
+      - output.elasticsearch.hosts=['elasticsearch']
+      - setup.kibana.host="kibana:5601"
+    networks:
+      - svcnet
+    depends_on:
+      - elasticsearch
+      - kibana
+      - logstash
+
+  influxdb:
+    image: influxdb:1.5.4
+    ports:
+      - 8086:8086
+      - 8083:8083
+      - 8090:8090
+    environment:
+      - INFLUXDB_ADMIN_ENABLED=true
+      - INFLUXDB_DB=callery
+      - INFLUXDB_DATA_ENGINE=tsm1
+      - INFLUXDB_REPORTING_DISABLED=false
+    networks:
+      - svcnet
+    healthcheck:
+      test: ['CMD', 'curl', '-f', 'http://localhost:8086']
+      interval: 10s
+      timeout: 5s
+      retries: 3
+  telegraf:
+    image: telegraf:latest
+    container_name: telegraf
+    links:
+      - influxdb
+    volumes:
+      - ./telegraf.conf:/etc/telegraf/telegraf.conf:ro
+    ports:
+      - 8125:8125
+    networks:
+      - svcnet
+    healthcheck:
+      test: ['CMD', 'curl', '-f', 'http://localhost:8125']
+      interval: 10s
+      timeout: 5s
+      retries: 3
+  grafana:
+    image: grafana/grafana:latest
+    container_name: grafana
+    ports:
+      - 3000:3000
+    links:
+      - influxdb
+    networks:
+      - svcnet
+    healthcheck:
+      test: ['CMD', 'curl', '-f', 'http://localhost:3000']
+      interval: 10s
+      timeout: 5s
+      retries: 3
+      
+networks:
+  svcnet:
+    driver: bridge
+volumes:
+  elasticsearch-data:
+    driver: local
