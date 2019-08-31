@@ -9,6 +9,7 @@ using Microsoft.Extensions.DependencyInjection;
 using ScienceTest.Api.Clients;
 using ScienceTest.Api.Logging;
 using App.Metrics;
+using Honeycomb.AspNetCore.Middleware;
 using Microsoft.Extensions.Logging;
 using ScienceTest.Api.Clients.Experiments;
 
@@ -61,6 +62,8 @@ namespace ScienceTest.Api
             services.AddMetricsTrackingMiddleware();
             services.AddMetricsReportingHostedService();
 
+            services.AddHoneycomb(Configuration);
+            
             services
                 .AddMvc()
                 .AddMetrics()
@@ -79,6 +82,7 @@ namespace ScienceTest.Api
                 .UseMiddleware<LoggingMiddleware>()
                 .UseElasticApm(Configuration)
                 .UseMetricsAllMiddleware()
+                .UseHoneycomb()
                 .UseMvc();
         }
     }
